@@ -1,0 +1,50 @@
+API PARA LA APP ANDROID DE ESTUDIANTES
+
+La web del empleado, el ESP32 y la app Android se comunican con el mismo servidor Flask y la misma base de datos casilleros.db. La app Android es un cliente separado; no tiene que abrir ni mostrar la web del empleado.
+
+ENDPOINT 1: iniciar sesión del estudiante
+POST /api/app/login
+Content-Type: application/json
+
+Cuerpo:
+{"cedula":"1838473643","telefono":"+57 300 000 0000"}
+
+Respuesta correcta (200):
+{"ok":true,"token":"...","token_type":"Bearer","expires_in":2592000}
+
+El servidor valida cédula y teléfono contra el registro hecho por la empleada. El teléfono se compara ignorando espacios y símbolos. La app debe guardar el token de forma segura; no debe guardar ni enviar la contraseña del empleado.
+
+ENDPOINT 2: consultar el casillero del estudiante autenticado
+GET /api/app/mi-casillero
+Authorization: Bearer TOKEN_RECIBIDO_EN_LOGIN
+
+Respuesta (200):
+{
+  "cedula":"1838473643",
+  "nombre":"Nombre del estudiante",
+  "casillero":1,
+  "estado":"cerrado",
+  "actualizado":"2026-11-14 10:30:00 Hora est. Colombia",
+  "open_event_id":12
+}
+
+La app puede consultar este endpoint cada pocos segundos mientras está activa. Si estado es "abierto", muestra la alerta. Para detectar una nueva apertura, compara open_event_id con el último valor consultado. Si el endpoint devuelve 401, debe pedir iniciar sesión otra vez. Si devuelve 404, el estudiante ya no tiene una asignación activa.
+
+ESP32 (se mantiene igual):
+POST /api/casilleros/estado
+Content-Type: application/json
+{"casillero":1,"estado":"abierto"}
+
+El ESP32 debe enviar "abierto" y "cerrado". El servidor actualiza la base de datos y registra el evento; tanto la página del empleado como la app consultan ese estado compartido.
+
+DIRECCIÓN DEL SERVIDOR
+En un celular físico conectado al mismo Wi-Fi, usa la IP local del computador, por ejemplo http://192.168.1.4:5000. No uses localhost ni 127.0.0.1 desde el celular: esas direcciones apuntan al propio celular. Para acceder desde fuera de la red de la universidad/casa, el servidor debe publicarse en un hosting con HTTPS.
+
+ALERTAS
+Esta API permite que la app consulte el estado. Para que Android muestre una notificación local mientras la app consulta el servidor, la app debe programar esa notificación. Para notificar cuando la app esté cerrada o en segundo plano, todavía falta integrar Firebase Cloud Messaging (FCM) con el servidor y la app. Este código todavía no envía notificaciones push.
+
+ARCHIVOS
+- app_casilleros.py: servidor actualizado.
+- utp_banner.png: imagen que necesita la web del empleado.
+- casilleros.db: conserva este archivo existente para mantener asignaciones e historial.
+- flask_secret.key: se genera al iniciar y debe conservarse para que los tokens sigan válidos tras reiniciar el servidor.
