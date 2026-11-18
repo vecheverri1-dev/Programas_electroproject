@@ -1,10 +1,10 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-const char* WIFI = "LORVAL";          // Poner nombre del WIFI
-const char* CLAVE_WIFI = "Dimensioncuantica"; //Poner la constraseña del WIFI
+const char* WIFI = "WIFI";          // Poner nombre del WIFI
+const char* CLAVE_WIFI = "CONTRASEÑA_WIFI"; //Poner la constraseña del WIFI
 const char* URL_SERVIDOR =
-  "http://192.168.1.4:5000/api/casilleros/estado"; // IP (privado) del ordenador
+  "http://acá_IP_del_ordenador:5000/api/casilleros/estado"; // IP (privado) del ordenador
 
 struct SensorCasillero {
   int numero;
