@@ -1,0 +1,117 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+const char* WIFI = "LORVAL";          // Poner nombre del WIFI
+const char* CLAVE_WIFI = "Dimensioncuantica"; //Poner la constraseña del WIFI
+const char* URL_SERVIDOR =
+  "http://192.168.1.4:5000/api/casilleros/estado"; // IP (privado) del ordenador
+
+struct SensorCasillero {
+  int numero;
+  int pin;
+  int nivelAbierto;
+  int lecturaEstable;
+  int ultimaLectura;
+  unsigned long cambioLectura;
+};
+
+SensorCasillero sensores[] = {
+  {1, 18, HIGH, HIGH, HIGH, 0}, // 1: Casillero, 18: conectado al GPIO18
+
+  // Agrega una fila por cada sensor conectado. Ejemplo:
+  // {2, 19, HIGH, HIGH, HIGH, 0}, // <-- Cambia 19 por el GPIO del casillero 2
+};
+
+// Si el código interpreta HIGH como “casillero abierto”, probar el sensor con la puerta cerrada y abierta. 
+// Si marca los estados al revés, cambiar solo el primer HIGH después del pin:{1, 18, LOW, HIGH, HIGH, 0}
+
+const int NUM_SENSORES = sizeof(sensores) / sizeof(sensores[0]);
+const unsigned long TIEMPO_ESTABILIDAD = 50; //--> Evita las lecturas repetidas por fluctuaciones
+
+void enviarEstado(int numeroCasillero, bool abierto) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Sin Wi-Fi; no se pudo enviar el estado");
+    return;
+  }
+
+  WiFiClient cliente;
+  HTTPClient http;
+
+  if (!http.begin(cliente, URL_SERVIDOR)) {
+    Serial.println("No se pudo iniciar la conexión HTTP");
+    return;
+  }
+
+  http.addHeader("Content-Type", "application/json");
+
+  String estado = abierto ? "abierto" : "cerrado";
+  String mensaje =
+    "{\"casillero\":" + String(numeroCasillero) +
+    ",\"estado\":\"" + estado + "\"}";
+
+  int codigo = http.POST(mensaje);
+
+  Serial.print("Casillero ");
+  Serial.print(numeroCasillero);
+  Serial.print(" está ");
+  Serial.print(estado);
+  Serial.print(" | Respuesta del servidor: ");
+  Serial.println(codigo);
+
+  http.end();
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    pinMode(sensores[i].pin, INPUT_PULLUP);
+
+    int lectura = digitalRead(sensores[i].pin);
+    sensores[i].lecturaEstable = lectura;
+    sensores[i].ultimaLectura = lectura;
+    sensores[i].cambioLectura = millis();
+  }
+
+  WiFi.begin(WIFI, CLAVE_WIFI);
+  Serial.print("Conectando al Wi-Fi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWi-Fi conectado");
+  Serial.println(WiFi.localIP());
+
+  // Al iniciar, envía el estado actual de cada sensor conectado.
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    bool abierto =
+      sensores[i].lecturaEstable == sensores[i].nivelAbierto;
+    enviarEstado(sensores[i].numero, abierto);
+  }
+}
+
+void loop() {
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    int lectura = digitalRead(sensores[i].pin);
+
+    if (lectura != sensores[i].ultimaLectura) {
+      sensores[i].ultimaLectura = lectura;
+      sensores[i].cambioLectura = millis();
+    }
+
+    bool lecturaCambioTiempo =
+      millis() - sensores[i].cambioLectura >= TIEMPO_ESTABILIDAD;
+
+    if (lecturaCambioTiempo &&
+        lectura != sensores[i].lecturaEstable) {
+      sensores[i].lecturaEstable = lectura;
+
+      bool abierto = lectura == sensores[i].nivelAbierto;
+      enviarEstado(sensores[i].numero, abierto);
+    }
+  }
+
+  delay(10);
+}
